@@ -1,0 +1,12 @@
+﻿{
+  "name": "telemetry-pulse",
+  "version": "1.0.0",
+  "description": "Lightweight metrics aggregator collecting CPU, memory, event loops and streaming PromQL-compatible time series.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node tests/run_tests.js"
+  },
+  "author": "Ali Nurettin Demir",
+  "license": "MIT"
+}
