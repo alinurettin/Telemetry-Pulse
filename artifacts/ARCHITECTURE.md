@@ -1,4 +1,4 @@
-﻿# ğŸ“ System Architecture Document: Telemetry-Pulse
+﻿# 📐 System Architecture Document: Telemetry-Pulse
 - **Project:** Telemetry-Pulse
 - **Author:** Expert Software Architect
 - **Status:** APPROVED & COMPLETE
