@@ -1,4 +1,4 @@
-﻿# ğŸ“Š Product Requirements Document (PRD): Telemetry-Pulse
+﻿# 📊 Product Requirements Document (PRD): Telemetry-Pulse
 - **Project:** Telemetry-Pulse
 - **Author:** Expert Business Analyst
 - **Status:** APPROVED & COMPLETE
