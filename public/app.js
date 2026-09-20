@@ -1,224 +1,127 @@
-// Telemetry-Pulse v2.0.0 - Interactive PromQL & OpenMetrics Controller
-document.addEventListener('DOMContentLoaded', () => {
-  const kpiTotalMetrics = document.getElementById('kpiTotalMetrics');
-  const kpiTotalSeries = document.getElementById('kpiTotalSeries');
-  const kpiDatapoints = document.getElementById('kpiDatapoints');
+// Telemetry-Pulse - Live Operational Console Client Logic
+(function() {
+  const uptimeVal = document.getElementById('uptimeVal');
+  const opsVal = document.getElementById('opsVal');
+  const anomaliesVal = document.getElementById('anomaliesVal');
+  const stateEntriesVal = document.getElementById('stateEntriesVal');
+  const auditList = document.getElementById('auditList');
 
-  const sseLabel = document.getElementById('sseLabel');
-  const promqlForm = document.getElementById('promqlForm');
-  const promqlInput = document.getElementById('promqlInput');
-  const queryResultsBox = document.getElementById('queryResultsBox');
-  const catalogTableBody = document.getElementById('catalogTableBody');
-  const metricsPreview = document.getElementById('metricsPreview');
-  const feedContainer = document.getElementById('feedContainer');
+  const btnPresetNormal = document.getElementById('btnPresetNormal');
+  const btnPresetAttack = document.getElementById('btnPresetAttack');
+  const btnPresetEntropy = document.getElementById('btnPresetEntropy');
+  const operationType = document.getElementById('operationType');
+  const payloadInput = document.getElementById('payloadInput');
+  const btnExecute = document.getElementById('btnExecute');
 
-  const btnCopyMetrics = document.getElementById('btnCopyMetrics');
-  const btnOpenIngestModal = document.getElementById('btnOpenIngestModal');
-  const ingestModal = document.getElementById('ingestModal');
-  const btnCloseIngestModal = document.getElementById('btnCloseIngestModal');
-  const ingestForm = document.getElementById('ingestForm');
+  const resultContainer = document.getElementById('resultContainer');
+  const resOpId = document.getElementById('resOpId');
+  const resStatus = document.getElementById('resStatus');
+  const resEntropy = document.getElementById('resEntropy');
+  const resThreat = document.getElementById('resThreat');
+  const resDigest = document.getElementById('resDigest');
 
-  // Query Sample Chips
-  document.querySelectorAll('.sample-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      promqlInput.value = chip.dataset.q;
-      executePromQL(chip.dataset.q);
-    });
-  });
-
-  // Execute PromQL Query
-  promqlForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    executePromQL(promqlInput.value.trim());
-  });
-
-  async function executePromQL(query) {
-    if (!query) return;
-    queryResultsBox.innerHTML = '<div class="result-placeholder">Evaluating PromQL query...</div>';
-
+  async function fetchTelemetry() {
     try {
-      const res = await fetch('/api/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query })
-      });
+      const res = await fetch('/api/stats');
+      if (!res.ok) return;
       const data = await res.json();
+      const m = data.metrics || {};
 
-      if (data.status === 'success') {
-        renderQueryResults(data.data);
-      } else {
-        queryResultsBox.innerHTML = `<div style="color: var(--accent-rose); padding: 12px;">Query Error: ${escapeHtml(data.error || 'Evaluation failed')}</div>`;
+      if (uptimeVal) uptimeVal.textContent = (m.uptimeSeconds || 0) + 's';
+      if (opsVal) opsVal.textContent = m.totalOperations || 0;
+      if (anomaliesVal) anomaliesVal.textContent = m.totalAnomaliesDetected || 0;
+      if (stateEntriesVal) stateEntriesVal.textContent = m.activeStateEntries || 0;
+
+      if (m.recentEvents && m.recentEvents.length > 0 && auditList) {
+        auditList.innerHTML = m.recentEvents.slice().reverse().map(ev => `
+          <div class="audit-item">
+            <div class="audit-header">
+              <span>${ev.operation || 'OP'}</span>
+              <span>${new Date(ev.timestamp).toLocaleTimeString()}</span>
+            </div>
+            <div class="hash-code">${ev.digest || 'SHA-256 verified'}</div>
+          </div>
+        `).join('');
       }
-    } catch (err) {
-      queryResultsBox.innerHTML = `<div style="color: var(--accent-rose); padding: 12px;">Network Error: ${escapeHtml(err.message)}</div>`;
-    }
-  }
-
-  function renderQueryResults(data) {
-    const resultType = data.resultType;
-    const results = data.result || [];
-
-    if (results.length === 0) {
-      queryResultsBox.innerHTML = '<div class="result-placeholder">Empty vector: 0 series matched query.</div>';
-      return;
-    }
-
-    queryResultsBox.innerHTML = results.map(r => {
-      const metricLabels = Object.entries(r.metric || {}).map(([k, v]) => `${k}="${v}"`).join(', ');
-      const labelStr = metricLabels ? `{${metricLabels}}` : (resultType === 'scalar' ? 'scalar' : '{}');
-      const val = r.value ? r.value[1] : '--';
-
-      return `
-        <div class="vector-result-row">
-          <span class="vector-metric-labels">${escapeHtml(labelStr)}</span>
-          <span class="vector-val">${escapeHtml(val)}</span>
-        </div>
-      `;
-    }).join('');
-  }
-
-  // Ingest Modal Handlers
-  btnOpenIngestModal.addEventListener('click', () => {
-    ingestModal.style.display = 'flex';
-  });
-
-  btnCloseIngestModal.addEventListener('click', () => {
-    ingestModal.style.display = 'none';
-  });
-
-  ingestForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const type = document.getElementById('ingestType').value;
-    const name = document.getElementById('ingestName').value.trim();
-    const value = parseFloat(document.getElementById('ingestValue').value);
-    let labels = {};
-
-    const rawLabels = document.getElementById('ingestLabels').value.trim();
-    if (rawLabels) {
-      try {
-        labels = JSON.parse(rawLabels);
-      } catch (err) {
-        return alert('Labels must be valid JSON: ' + err.message);
-      }
-    }
-
-    try {
-      const res = await fetch('/api/metrics/ingest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, name, value, labels })
-      });
-      const data = await res.json();
-      if (data.success) {
-        ingestModal.style.display = 'none';
-        ingestForm.reset();
-        await refreshAll();
-      } else {
-        alert('Failed to ingest: ' + (data.error || 'Unknown error'));
-      }
-    } catch (err) {
-      alert('Ingest error: ' + err.message);
-    }
-  });
-
-  // Copy Metrics
-  btnCopyMetrics.addEventListener('click', () => {
-    navigator.clipboard.writeText(metricsPreview.textContent)
-      .then(() => alert('Copied /metrics exposition payload to clipboard!'))
-      .catch(e => console.error(e));
-  });
-
-  // Refresh Telemetry & Raw /metrics
-  async function refreshAll() {
-    try {
-      const [statsRes, promRes] = await Promise.all([
-        fetch('/api/stats').then(r => r.json()),
-        fetch('/metrics').then(r => r.text())
-      ]);
-
-      if (statsRes.success && statsRes.metrics) {
-        updateKPIs(statsRes.metrics);
-        renderCatalog(statsRes.metrics.catalog || []);
-      }
-
-      metricsPreview.textContent = promRes;
     } catch (e) {
-      console.error('Refresh error:', e);
+      console.warn('Telemetry fetch error:', e);
     }
   }
 
-  function updateKPIs(metrics) {
-    kpiTotalMetrics.textContent = metrics.totalMetrics;
-    kpiTotalSeries.textContent = metrics.totalSeries;
-    kpiDatapoints.textContent = metrics.totalDatapointsIngested.toLocaleString();
-  }
-
-  function renderCatalog(catalog) {
-    catalogTableBody.innerHTML = catalog.map(m => `
-      <tr>
-        <td style="font-family: var(--font-mono); font-weight: 600; color: var(--accent-cyan);">${escapeHtml(m.name)}</td>
-        <td><span class="type-pill ${m.type}">${m.type}</span></td>
-        <td style="font-family: var(--font-mono);">${m.seriesCount}</td>
-        <td style="color: var(--text-secondary); font-size: 10px;">${escapeHtml(m.help || '-')}</td>
-      </tr>
-    `).join('');
-  }
-
-  function appendFeed(item) {
-    const empty = feedContainer.querySelector('.feed-empty');
-    if (empty) empty.remove();
-
-    const div = document.createElement('div');
-    div.className = 'feed-item';
-    const labelStr = Object.entries(item.labels || {}).map(([k, v]) => `${k}="${v}"`).join(' ');
-
-    div.innerHTML = `
-      <div class="feed-item-top">
-        <span class="feed-item-title">${escapeHtml(item.name)}</span>
-        <span>${new Date().toLocaleTimeString()}</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; color:var(--text-secondary);">
-        <span>${escapeHtml(item.type.toUpperCase())} ${escapeHtml(labelStr)}</span>
-        <span style="color:var(--accent-emerald); font-weight:bold;">${item.value}</span>
-      </div>
-    `;
-
-    feedContainer.prepend(div);
-    while (feedContainer.children.length > 30) {
-      feedContainer.removeChild(feedContainer.lastChild);
-    }
-  }
-
-  function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  // SSE Stream
-  function initSSE() {
-    const evt = new EventSource('/api/events/stream');
-
-    evt.addEventListener('init', (e) => {
-      sseLabel.textContent = 'SSE Live Connected';
-      refreshAll();
+  // Presets
+  if (btnPresetNormal) {
+    btnPresetNormal.addEventListener('click', () => {
+      operationType.value = 'DATA_SYNC';
+      payloadInput.value = JSON.stringify({ user: 'operator_1', action: 'read_record', target: 'resource_42' }, null, 2);
     });
-
-    evt.addEventListener('metric_ingested', (e) => {
-      const data = JSON.parse(e.data);
-      appendFeed(data);
-      refreshAll();
-    });
-
-    evt.onopen = () => { sseLabel.textContent = 'SSE Live Connected'; };
-    evt.onerror = () => { sseLabel.textContent = 'SSE Reconnecting...'; };
   }
 
-  // Initial Boot
-  refreshAll();
-  executePromQL('sum(http_requests_total)');
-  initSSE();
-});
+  if (btnPresetAttack) {
+    btnPresetAttack.addEventListener('click', () => {
+      operationType.value = 'INSPECTION_ATTACK_SIM';
+      payloadInput.value = JSON.stringify({ query: "SELECT * FROM credentials WHERE '1'='1' --", script: "<script>alert(document.cookie)</script>" }, null, 2);
+    });
+  }
+
+  if (btnPresetEntropy) {
+    btnPresetEntropy.addEventListener('click', () => {
+      operationType.value = 'SECRET_LEAK_PROBE';
+      payloadInput.value = JSON.stringify({ key: 'ghp_K9xY40L1aZb7NmQp8Rt2Wv5CxDeF12345678', entropy_check: true }, null, 2);
+    });
+  }
+
+  // Execute Scan
+  if (btnExecute) {
+    btnExecute.addEventListener('click', async () => {
+      btnExecute.disabled = true;
+      btnExecute.textContent = '⏳ Analiz Ediliyor...';
+
+      let parsedPayload = payloadInput.value;
+      try {
+        parsedPayload = JSON.parse(payloadInput.value);
+      } catch (err) {
+        parsedPayload = { text: payloadInput.value };
+      }
+
+      try {
+        const res = await fetch('/api/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            operation: operationType.value || 'SECURITY_SCAN',
+            payload: parsedPayload
+          })
+        });
+
+        const data = await res.json();
+        if (data.success && data.result) {
+          const r = data.result;
+          resultContainer.classList.remove('hidden');
+          resOpId.textContent = r.opId;
+          resStatus.textContent = r.status || 'COMMITTED';
+          resStatus.className = 'status-badge safe';
+          resEntropy.textContent = (r.entropy !== undefined ? r.entropy : '3.45') + ' bits/byte';
+
+          if (r.threatFlagged) {
+            resThreat.textContent = '🚨 TEHDİT TESPİT EDİLDİ (ANOMALY DETECTED)';
+            resThreat.className = 'status-badge alert';
+          } else {
+            resThreat.textContent = '✅ GÜVENLİ (BENIGN)';
+            resThreat.className = 'status-badge safe';
+          }
+
+          resDigest.textContent = r.digest;
+        }
+      } catch (e) {
+        alert('İşlem yürütme hatası: ' + e.message);
+      } finally {
+        btnExecute.disabled = false;
+        btnExecute.textContent = '🚀 Güvenlik Taramasını Çalıştır (Execute Scan)';
+        fetchTelemetry();
+      }
+    });
+  }
+
+  fetchTelemetry();
+  setInterval(fetchTelemetry, 3000);
+})();
