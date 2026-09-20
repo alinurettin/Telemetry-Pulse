@@ -1,36 +1,178 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Telemetry-Pulse | Operational Studio</title>
+  <title>Telemetry-Pulse v2.0.0 | OpenTelemetry & Prometheus Telemetry Gateway</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
-  <header class="header">
-    <div class="brand">
-      <span class="logo">⚡</span>
-      <div>
-        <h1>Telemetry-Pulse</h1>
-        <span class="sub">OpenTelemetry Real-Time Metric Ingestion Daemon</span>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-icon">📊</span>
+        <div class="brand-info">
+          <h1>Telemetry-Pulse <span class="badge version">v2.0.0</span></h1>
+          <p class="subtitle">OpenTelemetry Ingestion &bull; OpenMetrics / Prometheus Gateway &bull; PromQL Evaluator</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="sse-status" id="sseStatus">
+          <span class="pulse-dot"></span>
+          <span id="sseLabel">Connecting SSE...</span>
+        </div>
+        <a href="/metrics" target="_blank" class="btn btn-secondary">
+          <span class="btn-icon">📡</span> View /metrics
+        </a>
+      </div>
+    </header>
+
+    <!-- Top KPI Grid -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">TOTAL METRICS</span>
+          <span class="kpi-icon">📈</span>
+        </div>
+        <div class="kpi-value" id="kpiTotalMetrics">--</div>
+        <div class="kpi-sub">Registered metric families</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">ACTIVE TIME-SERIES</span>
+          <span class="kpi-icon">🏷️</span>
+        </div>
+        <div class="kpi-value" id="kpiTotalSeries">--</div>
+        <div class="kpi-sub">Unique label permutations</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">DATAPOINTS INGESTED</span>
+          <span class="kpi-icon">⚡</span>
+        </div>
+        <div class="kpi-value" id="kpiDatapoints">--</div>
+        <div class="kpi-sub">High-frequency observations</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">SCRAPE ENDPOINT</span>
+          <span class="kpi-icon">🟢</span>
+        </div>
+        <div class="kpi-value" style="color: var(--accent-emerald);">HTTP 200</div>
+        <div class="kpi-sub">OpenMetrics v0.0.4 text</div>
+      </div>
+    </section>
+
+    <!-- Main Workspace -->
+    <div class="workspace-layout">
+      <!-- Left: PromQL Console & Catalog -->
+      <section class="console-panel">
+        <div class="sub-panel">
+          <div class="panel-header">
+            <h2>PromQL Query Console</h2>
+            <div class="query-samples">
+              <button class="sample-chip" data-q="http_requests_total">http_requests_total</button>
+              <button class="sample-chip" data-q="sum(http_requests_total)">sum(...)</button>
+              <button class="sample-chip" data-q="avg(http_requests_total)">avg(...)</button>
+              <button class="sample-chip" data-q="rate(http_requests_total[1m])">rate(...)</button>
+            </div>
+          </div>
+
+          <form id="promqlForm" class="promql-form">
+            <div class="input-row">
+              <input type="text" id="promqlInput" class="form-input" placeholder="e.g. sum(http_requests_total{status='200'})" value="sum(http_requests_total)">
+              <button type="submit" class="btn btn-primary" id="btnExecuteQuery">Execute Query</button>
+            </div>
+          </form>
+
+          <div class="query-results-box" id="queryResultsBox">
+            <div class="result-placeholder">Run a PromQL query to view time series vectors...</div>
+          </div>
+        </div>
+
+        <!-- Metric Descriptors Catalog -->
+        <div class="sub-panel">
+          <div class="panel-header">
+            <h2>Metric Catalog</h2>
+            <button class="btn btn-secondary btn-sm" id="btnOpenIngestModal">+ Ingest Datapoint</button>
+          </div>
+          <div class="catalog-table-wrap">
+            <table class="catalog-table">
+              <thead>
+                <tr>
+                  <th>Metric Name</th>
+                  <th>Type</th>
+                  <th>Series Count</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody id="catalogTableBody">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: Ingestion Feed & Raw Prometheus Scrape Preview -->
+      <aside class="side-panel">
+        <div class="sub-panel">
+          <div class="panel-header">
+            <h3>Live Scrape Preview (/metrics)</h3>
+            <button class="btn btn-secondary btn-sm" id="btnCopyMetrics">Copy</button>
+          </div>
+          <pre class="metrics-preview" id="metricsPreview"></pre>
+        </div>
+
+        <div class="sub-panel flex-1">
+          <div class="panel-header">
+            <h3>Live Datapoint Stream</h3>
+            <span class="live-badge">LIVE SSE</span>
+          </div>
+          <div class="feed-container" id="feedContainer">
+            <div class="feed-empty">Listening for metric observations...</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Ingest Datapoint Modal -->
+    <div class="modal-overlay" id="ingestModal" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>⚡ Ingest Metric Datapoint</h3>
+          <button class="modal-close" id="btnCloseIngestModal">&times;</button>
+        </div>
+        <form id="ingestForm">
+          <div class="modal-body">
+            <label>Metric Type:</label>
+            <select id="ingestType" class="form-select">
+              <option value="counter">Counter (Monotonic)</option>
+              <option value="gauge">Gauge (Snapshot)</option>
+              <option value="histogram">Histogram (Distribution)</option>
+            </select>
+            <label>Metric Name:</label>
+            <input type="text" id="ingestName" class="form-input" placeholder="e.g. cache_hits_total" required>
+            <label>Observation Value:</label>
+            <input type="number" step="any" id="ingestValue" class="form-input" value="1" required>
+            <label>Labels JSON (Optional):</label>
+            <input type="text" id="ingestLabels" class="form-input" placeholder='{"env": "prod", "cache": "redis"}'>
+          </div>
+          <div class="modal-footer">
+            <button type="submit" class="btn btn-primary">Ingest Datapoint</button>
+          </div>
+        </form>
       </div>
     </div>
-    <div class="status-badge">🟢 Operational Active</div>
-  </header>
-  <main class="main">
-    <div class="card">
-      <h2>Engine Overview</h2>
-      <p>Lightweight metrics aggregator collecting CPU, memory, event loops and streaming PromQL-compatible time series.</p>
-      <div class="metrics-row" id="metricsRow">
-        <div class="metric"><span class="lbl">STATUS</span><span class="val">HEALTHY</span></div>
-        <div class="metric"><span class="lbl">LATENCY</span><span class="val">1.2 ms</span></div>
-        <div class="metric"><span class="lbl">THROUGHPUT</span><span class="val">1,250 req/s</span></div>
-      </div>
-    </div>
-  </main>
-  <footer class="footer">
-    <p>Telemetry-Pulse &bull; Autonomously engineered by 7-Agent SDLC Factory for <a href="https://github.com/alinurettin/Telemetry-Pulse" target="_blank">Ali Nurettin Demir</a></p>
-  </footer>
+
+    <footer class="app-footer">
+      <p>Telemetry-Pulse v2.0.0 &bull; Autonomously engineered by 7-Agent SDLC Factory for <a href="https://github.com/alinurettin/Telemetry-Pulse" target="_blank">Ali Nurettin Demir</a></p>
+    </footer>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
